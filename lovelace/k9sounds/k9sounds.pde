@@ -34,7 +34,8 @@ int unsigned buttons = 0;
 Sd2Card card;           // SD/SDHC card with support for version 2.00 features
 SdVolume volume;           // FAT16 or FAT32 volume
 SdFile root;            // volume's root directory
-SdFile kns;             // k9 sound files, by number
+//SdFile kns;             // k9 sound files, by number
+SdFile dirfile;           // subdirectory file (kns=sounds, num=digets)
 SdFile soundfile;        // the file to play
 WaveRP wave;
 
@@ -49,6 +50,7 @@ byte rn=0;
 String soundindex;
 char soundtoplay[bufferLength];
 char c; // character read at any particular point in time
+uint8_t i; // i is used for loops
 
 // create the arrays that will hold the group info.  Use ugly names since C doesn't have variable sized 2D arrays.
 byte g1size = 3;
@@ -160,8 +162,12 @@ void buttonpadrw() {
    sound routines
 */
 // play a kns (k nine sound) file by name
-void playFile(char * name) {
-  if (!soundfile.open(kns, name)) {
+void playFile(char * name, char * dirname) {
+  PgmPrint("Getting ready to play: ");Serial.print(name);
+  if (!dirfile.open(&root, dirname, O_READ)) {
+        PgmPrintln("Can't open directory"); 
+  }
+  if (!soundfile.open(dirfile, name)) {
     PgmPrint("Can't open: ");
     Serial.println(name);
     return;
@@ -180,6 +186,7 @@ void playFile(char * name) {
     Serial.print(".");
   }
   soundfile.close();
+  dirfile.close();
   digitalWrite(ledPin, LOW);
   PgmPrintln("Done playing, soundfile closed.");
 }
@@ -191,12 +198,92 @@ void speak (String numtoplay) { // play a clip if you have
     PgmPrint("playing sound file: ");
     Serial.println(soundindex);
     soundindex.toCharArray(soundtoplay,bufferLength); // lame convert from string back into char
-    playFile(soundtoplay);
+    playFile(soundtoplay, "kns");
 }
 
 // play a sound described by a number
 void speak_by_num(int numtoplay) {
   speak (String(numtoplay));
+}
+
+// say a number in natural language
+void parse_number(float numtosay) {
+  int num;
+  if (numtosay < 0) { // maybe it's a negative number.  If so, note that and then treat it as positive
+    speak_num("n"); // say "negative"
+    numtosay=abs(numtosay);
+  }
+  if (numtosay >= 1e12) { // =1,000,000,000,000 or one trillion in scientific notation
+    num=numtosay/1e12;
+    hundreds(num); // call hundreds to speak these three
+    speak_num("tr"); // say "trillion"
+    numtosay=numtosay-(num* 1e12);
+  }
+  if (numtosay >= 1e9) { // =1,000,000,000 or one billion in scientific notation
+    num=numtosay/1e9;
+    hundreds(num); // call hundreds to speak these three
+    speak_num("b"); // say "billion"
+    numtosay=numtosay-(num * 1e9);
+  }
+  if (numtosay >= 1e6) { // =1,000,000 or one million in scientific notation
+    num=numtosay/1e6;
+    hundreds(num); // call hundreds to speak these three
+    speak_num("m"); // say "million"
+    numtosay=numtosay-(num*1e6);
+  }
+  if (numtosay >= 1e3) { // =1,000 or one million in scientific notation
+    num=numtosay/1e3;
+    hundreds(num); // call hundreds to speak these three
+    speak_num("t"); // say "thousand"
+    numtosay=numtosay-(num * 1e3);
+  }
+  hundreds(numtosay);  // say whatever is left before the zero
+  numtosay=numtosay - (int) numtosay; // trim off anything before the zero.
+  if (numtosay > 0 ) { // maybe there is a fraction to say
+    speak_num("p"); // say "point"
+    numtosay=numtosay*10;
+    while (numtosay > 0) { // just loop until the number is done, hope it isn't repeating
+      speak_num(String((int)numtosay));
+      numtosay=numtosay-int(numtosay);
+      numtosay=numtosay*10;
+    } // end of while loop
+  } // end of fractions
+} // end of number parse
+
+// speak a number from 0-999, calling the tens as needed
+void hundreds(int numtosay) {
+  int num;
+  if (numtosay > 99 ) { // we need to say the hundreds place
+    num = ((numtosay/100)*100); // get just the hundreds diget
+    speak_num(String(num)); // say the digit
+    speak_num("h"); // say "hundred"
+  } // end of "bigger than 99"
+  if ((numtosay % 100) > 0 ) { // if it's not an even hundred
+    tens(numtosay); // call the tens function to finish it up
+  }
+}
+
+// speak a number from from 0-99, called from other functions, never with larger than 99
+void tens(int numtosay) {
+  int num;
+  if (numtosay > 19 ) { // do for the bigger numbers
+    num = ((numtosay/10)*10); // convert 23 to 20, 42 to 40, etc.
+    speak_num(String(num));
+    if ((numtosay % 10) > 0) { // speak the remainder, if any.
+      speak_num(String(numtosay % 10));
+    } // end of remainder condition
+  } else { // end of bigger number condition, so speak the smaller numbers
+    speak_num(String(numtosay)); // remaining condition should be 0-19, which we have files for
+  }
+}
+
+// speak a particular sound number file.
+void speak_num(String numtoplay) {
+    soundindex=numtoplay + ".WAV";  // add the extention
+    PgmPrint("playing number file: ");
+    Serial.println(soundindex);
+    soundindex.toCharArray(soundtoplay,bufferLength); // lame convert from string back into char
+    playFile(soundtoplay, "num");  
 }
 
 // pick a random element from an array
@@ -205,10 +292,13 @@ byte rand_array(byte r_array[], byte r_size) {
   Serial.println(randNumber);
   return r_array[randNumber];
 }
-uint8_t i;
 
-void setup()                    // run once, when the sketch starts
-{
+/*
+*
+*    setup() is run once when arduino is first reset
+*
+*/
+void setup() {                   // run once, when the sketch starts
   // set up the pins used for buttonpad
   pinMode(CS, OUTPUT);
   pinMode(MISO, OUTPUT);
@@ -231,10 +321,9 @@ void setup()                    // run once, when the sketch starts
   if (!root.openRoot(&volume)) {
         PgmPrintln("Can't open root dir"); 
   }
-//  char * dirname = 'KNS';
-  if (!kns.open(&root, "kns", O_READ)) {
-        PgmPrintln("Can't open KNS dir"); 
-  }
+//  if (!kns.open(&root, "kns", O_READ)) {
+//        PgmPrintln("Can't open KNS dir"); 
+//  }
 
   PgmPrintln("Incomming Data");
 //  playFile("start.wav");
@@ -243,8 +332,12 @@ void setup()                    // run once, when the sketch starts
   setbuttons();
   buttonpadrw();
 
-}
-
+} // end of setup()
+/*
+*
+*    Main loop, all the code runs here
+*
+*/
 void loop() { // main program
     Serial.print("freeMemory()=");
     Serial.println(freeMemory());
