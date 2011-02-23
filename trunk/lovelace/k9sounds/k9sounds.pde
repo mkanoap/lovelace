@@ -1,17 +1,17 @@
 /*
   Lovelace brain - sound lobe
   v 1.0
-
 */
 
 #include <MemoryFree.h>
 
+// waveRP libraries for playing wave files
 #include <mcpDac.h>
 #include <pin_to_avr.h>
 #include <WaveRP.h>
 #include <WaveStructs.h>
 
-//#include "freeRam.h"
+// sdcard libraries
 #include <SdFat.h>
 #include <Sd2Card.h>
 #include "PgmPrint.h"
@@ -27,7 +27,7 @@
 #define numsounds 181
 
 // buttonpad globals
-byte lights[3][16]; // [3] = Red, Blue, Green //
+byte lights[3][16]; // [3] = Red, Blue, Green // array that holds all the light values
 int unsigned buttons = 0;
 
 // wav global variables
@@ -40,6 +40,8 @@ WaveRP wave;
 
 byte ledPin = 6;  // When a SCAN_ENTER scancode is received the LED blink
 byte randPin = 6; // this is the analog pin used for random numbers
+
+// program global variables
 const byte bufferLength = 12;
 char buffer[bufferLength];      // serial input buffer
 byte bufferPos = 0; 
@@ -47,7 +49,8 @@ byte rn=0;
 String soundindex;
 char soundtoplay[bufferLength];
 char c; // character read at any particular point in time
-// create the arrays that will hold the group info
+
+// create the arrays that will hold the group info.  Use ugly names since C doesn't have variable sized 2D arrays.
 byte g1size = 3;
 byte g1array[] = {12,13,34};
 byte g2size = 3;
@@ -81,8 +84,11 @@ byte g15array[] = {122};
 byte g16size = 31;
 byte g16array[] = {16,18,19,20,27,30,31,32,38,39,41,51,53,56,57,60,83,113,118,127,128,131,135,145,148,151,153,160,163,168,172};
 boolean b = 0;
-//uint8_t bufferidx = 0;
 
+/*
+     button functions
+     
+*/
 // randomize the buttons
 void randomize() {
   for(int f = 0; f < 3; f++) {// cycle through the frames
@@ -113,43 +119,46 @@ void setbuttons() {
   PgmPrintln("buttons reset");
 }
 
+// update the buttons with current colors, and read in button press values
 void buttonpadrw() {
   digitalWrite(SCK, HIGH);
-  digitalWrite(CS, HIGH);
+  digitalWrite(CS, HIGH); // bring up the clock select pin, to start reading/writing
   delayMicroseconds(15);
 
-  for(byte f = 0; f < 4; f++) { // cycle through the frames
-      for(int i = 0; i < 16; i++) {
-        if (bitRead(buttons,i)==1) {
+  for(byte f = 0; f < 4; f++) { // cycle through the frames, Red, Blue, Green and "button read"
+      for(int i = 0; i < 16; i++) { // cycle through the buttons, one byte each
+        if (bitRead(buttons,i)==1) { // if a button is marked as "pressed" from previous iteration
           lights[f][i] = 10;  // a held down button is white
         }
-        for(int ii = 0; ii < 8; ii++) {
-          digitalWrite(SCK, LOW);
-          delayMicroseconds(5);
+        for(int ii = 0; ii < 8; ii++) { // cycle through the bits in a single byte
+          digitalWrite(SCK, LOW); // bring down clock pin and ...
+          delayMicroseconds(5); // ... wait 5 microseconds
 
-          if (f < 3) {
-            digitalWrite(MISO, bitRead(lights[f][i],ii)); // write out the colors
-          } else if (ii == 0) {
-            b = abs(digitalRead(MOSI)-1);
+          if (f < 3) { // for the three color frames... 
+            digitalWrite(MISO, bitRead(lights[f][i],ii)); // ...write out the colors by flipping the MISO pin
+          } else if (ii == 0) { // for the fourth frame...
+            b = abs(digitalRead(MOSI)-1); // ... ignore MISO and instead read the MOSI pin
             bitWrite(buttons,i,b); // note the buttons
           }
           delayMicroseconds(5);
-          digitalWrite(SCK, HIGH);
-          delayMicroseconds(10);
-        }
-      }
-  }
-  digitalWrite(CS, LOW);
+          digitalWrite(SCK, HIGH); // after waiting 5 microseconds, bring the clock pin up...
+          delayMicroseconds(10); // ... wait 10 microseconds...
+        } // ... finish up the byte loop
+      } // finish the button loop
+  } // finish the all the writing
+  digitalWrite(CS, LOW); // bring clock select pin down, because we are finished.
 
   delayMicroseconds(400);
   delay(10);
-//  PgmPrintln("button rw");
-if (buttons >0) {
-  PgmPrint("buttons:'");
-  Serial.println(buttons);
-}
-}
 
+  if (buttons >0) {
+    PgmPrint("buttons:'");
+    Serial.println(buttons);
+  }
+}
+/*
+   sound routines
+*/
 // play a kns (k nine sound) file by name
 void playFile(char * name) {
   if (!soundfile.open(kns, name)) {
