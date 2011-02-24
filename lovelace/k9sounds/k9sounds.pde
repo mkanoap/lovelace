@@ -153,6 +153,8 @@ void buttonpadrw() {
   delayMicroseconds(400);
   delay(10);
 
+buttons = 0; // just for debugging, delete me
+
   if (buttons >0) {
     PgmPrint("buttons:'");
     Serial.println(buttons);
@@ -165,7 +167,9 @@ void buttonpadrw() {
 void playFile(char * name, char * dirname) {
   PgmPrint("Getting ready to play: ");Serial.print(name);
   if (!dirfile.open(&root, dirname, O_READ)) {
-        PgmPrintln("Can't open directory"); 
+        PgmPrintln("Can't open directory."); 
+        dirfile.close();
+        return;
   }
   if (!soundfile.open(dirfile, name)) {
     PgmPrint("Can't open: ");
@@ -191,7 +195,9 @@ void playFile(char * name, char * dirname) {
   PgmPrintln("Done playing, soundfile closed.");
 }
 
+/*
 // play a clip described by name
+*/
 void speak (String numtoplay) { // play a clip if you have 
     soundindex = "KNS"; // start off by setting the start of the file name
     soundindex=soundindex + numtoplay + ".WAV";  // finish off by adding the extention
@@ -201,13 +207,19 @@ void speak (String numtoplay) { // play a clip if you have
     playFile(soundtoplay, "kns");
 }
 
+/*
 // play a sound described by a number
+*/
 void speak_by_num(int numtoplay) {
   speak (String(numtoplay));
 }
 
+/*
 // say a number in natural language
+*/
 void parse_number(float numtosay) {
+  PgmPrint(" parsing number: ");
+  Serial.println(numtosay);
   int num;
   if (numtosay < 0) { // maybe it's a negative number.  If so, note that and then treat it as positive
     speak_num("n"); // say "negative"
@@ -231,7 +243,7 @@ void parse_number(float numtosay) {
     speak_num("m"); // say "million"
     numtosay=numtosay-(num*1e6);
   }
-  if (numtosay >= 1e3) { // =1,000 or one million in scientific notation
+  if (numtosay >= 1e3) { // =1,000 or one thousand in scientific notation
     num=numtosay/1e3;
     hundreds(num); // call hundreds to speak these three
     speak_num("t"); // say "thousand"
@@ -254,12 +266,12 @@ void parse_number(float numtosay) {
 void hundreds(int numtosay) {
   int num;
   if (numtosay > 99 ) { // we need to say the hundreds place
-    num = ((numtosay/100)*100); // get just the hundreds diget
+    num = (numtosay/100); // get just the hundreds diget
     speak_num(String(num)); // say the digit
     speak_num("h"); // say "hundred"
   } // end of "bigger than 99"
   if ((numtosay % 100) > 0 ) { // if it's not an even hundred
-    tens(numtosay); // call the tens function to finish it up
+    tens(numtosay % 100); // call the tens function to finish it up
   }
 }
 
@@ -424,6 +436,14 @@ void loop() { // main program
       i++;
     }
     speak(soundindex);
+  } else if (buffer[0]=='n') { // they asked for an affirmative
+    i=1;
+    soundindex = "";
+    while (buffer[i] != 0 && i < 12) { // make soundindex be the next three digits
+      soundindex = soundindex + buffer[i];
+      i++;
+    }
+    parse_number((float)soundindex.toInt());
   } else if (buffer[0]=='g') { // they asked for an affermative
 //      Serial.println(buffer[1]);
       if (buffer[2]==0) { // if the string is just 1 character long
