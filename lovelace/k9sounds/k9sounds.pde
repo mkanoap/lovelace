@@ -1,8 +1,9 @@
 /*
   Lovelace brain - sound lobe
-  v 1.0
+  v 1.1
 */
 
+// library for showing free memory.
 #include <MemoryFree.h>
 
 // waveRP libraries for playing wave files
@@ -14,14 +15,15 @@
 // sdcard libraries
 #include <SdFat.h>
 #include <Sd2Card.h>
-#include "PgmPrint.h"
+//#include "PgmPrint.h" ... functionality appears in sdFatUtil.h
+#include <SdFatUtil.h>
 #include <ctype.h>
 
 // I/O Configuration //
-#define CS 6   // blue
-#define MISO 7 // orange
-#define MOSI 8 // green
-#define SCK  9 // yellow
+#define CS 6   // blue wire
+#define MISO 7 // orange wire
+#define MOSI 8 // green wire
+#define SCK  9 // yellow wire
 
 // number of sounds
 #define numsounds 181
