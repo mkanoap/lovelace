@@ -6,6 +6,9 @@
 // library for showing free memory.
 #include <MemoryFree.h>
 
+// library for program space
+#include <avr/pgmspace.h>
+
 // waveRP libraries for playing wave files
 #include <mcpDac.h>
 #include <pin_to_avr.h>
@@ -41,7 +44,7 @@ SdFile dirfile;           // subdirectory file (kns=sounds, num=digets)
 SdFile soundfile;        // the file to play
 WaveRP wave;
 
-byte ledPin = 6;  // When a SCAN_ENTER scancode is received the LED blink
+byte ledPin = 6;  // When a sound is played, turn on LED
 byte randPin = 6; // this is the analog pin used for random numbers
 
 // program global variables
@@ -54,44 +57,34 @@ char soundtoplay[bufferLength];
 char c; // character read at any particular point in time
 uint8_t i; // i is used for loops
 
-// create the arrays that will hold the group info.  Use ugly names since C doesn't have variable sized 2D arrays.
-byte g1size = 3;
-byte g1array[] = {12,13,34};
-byte g2size = 3;
-byte g2array[] = {82,108,109};
-byte g3size = 5;
-byte g3array[] = {91,92,93,94,95};
-byte g4size = 5;
-byte g4array[] = {103,104,105,106,107};
-byte g5size = 15;
-byte g5array[] = {22,24,49,86,98,112,115,117,141,142,146,162,166,179};
-byte g6size = 1;
-byte g6array[] = {23};
-byte g7size = 2;
-byte g7array[] = {28,34};
-byte g8size = 1;
-byte g8array[] = {75};
-byte g9size = 2;
-byte g9array[] = {59,77};
-byte g10size = 1;
-byte g10array[] = {180};
-byte g11size = 2;
-byte g11array[] = {42,120};
-byte g12size = 1;
-byte g12array[] = {152};
-byte g13size = 1;
-byte g13array[] = {147};
-byte g14size = 2;
-byte g14array[] = {175,176};
-byte g15size = 1;
-byte g15array[] = {122};
-byte g16size = 31;
-byte g16array[] = {16,18,19,20,27,30,31,32,38,39,41,51,53,56,57,60,83,113,118,127,128,131,135,145,148,151,153,160,163,168,172};
+/*
+ Create the arrays that will hold the group info.
+ Stick them into program memory for arcane manipulation to save ram.
+ Put a 0 byte at the end (wasting 16 bytes) so they can be manipulated by string functions
+*/
+prog_uchar g1array[] PROGMEM = {12,13,34,0};
+prog_uchar g2array[] PROGMEM = {82,108,109,0};
+prog_uchar g3array[] PROGMEM = {91,92,93,94,95,0};
+prog_uchar g4array[] PROGMEM = {103,104,105,106,107,0};
+prog_uchar g5array[] PROGMEM = {22,24,49,86,98,112,115,117,141,142,146,162,166,179,0};
+prog_uchar g6array[] PROGMEM = {23,0};
+prog_uchar g7array[] PROGMEM = {28,34,0};
+prog_uchar g8array[] PROGMEM = {75,0};
+prog_uchar g9array[] PROGMEM = {59,77,0};
+prog_uchar g10array[] PROGMEM = {180,0};
+prog_uchar g11array[] PROGMEM = {42,120,0};
+prog_uchar g12array[] PROGMEM = {152,0};
+prog_uchar g13array[] PROGMEM = {147,0};
+prog_uchar g14array[] PROGMEM = {175,176,0};
+prog_uchar g15array[] PROGMEM = {122,0};
+prog_uchar g16array[] PROGMEM = {16,18,19,20,27,30,31,32,38,39,41,51,53,56,57,60,83,113,118,127,128,131,135,145,148,151,153,160,163,168,172,0};
+// create a table that is an array of pointers to the arrays in program memory
+const prog_uchar* group_table[] PROGMEM = {g1array,g2array,g3array,g4array,g5array,g6array,g7array,g8array,g9array,g10array,g11array,g12array,g13array,g14array,g15array,g16array};
+
 boolean b = 0;
 
 /*
-     button functions
-     
+     button functions 
 */
 // randomize the buttons
 void randomize() {
@@ -155,7 +148,7 @@ void buttonpadrw() {
   delayMicroseconds(400);
   delay(10);
 
-buttons = 0; // just for debugging, delete me
+buttons = 0; // just for debugging, delete me if plugged into a button pad
 
   if (buttons >0) {
     PgmPrint("buttons:'");
@@ -165,7 +158,7 @@ buttons = 0; // just for debugging, delete me
 /*
    sound routines
 */
-// play a kns (k nine sound) file by name
+// play a file by name, from provided directory
 void playFile(char * name, char * dirname) {
   PgmPrint("Getting ready to play: ");Serial.print(name);
   if (!dirfile.open(&root, dirname, O_READ)) {
@@ -300,11 +293,23 @@ void speak_num(String numtoplay) {
     playFile(soundtoplay, "num");  
 }
 
-// pick a random element from an array
-byte rand_array(byte r_array[], byte r_size) {
+// pick a random element from an array, old version to be deleted
+byte rand_array_old(byte r_array[], byte r_size) {
   byte randNumber= random(r_size);
   Serial.println(randNumber);
   return r_array[randNumber];
+}
+// pick a random element from an array
+byte rand_array(byte rindex) {
+  // get the length of array in progmem who's position in the table is "index"
+  byte r_size= strlen_P((PGM_P)pgm_read_word(&group_table[rindex])); 
+Serial.print("r_size: ");Serial.println((int)r_size);
+  byte randNumber= random(r_size);
+  Serial.println((int)randNumber);
+  // copy one byte from the array in progmem who's postion in the table is "index", ofset by randNumber
+  byte r_result;
+  memcpy_P(&r_result, (PGM_P)pgm_read_word(&group_table[rindex])+randNumber, 1);
+  return r_result;
 }
 
 /*
@@ -323,7 +328,21 @@ void setup() {                   // run once, when the sketch starts
   delay(1);
   
   Serial.begin(9600);
-  Serial.println("K9 sound module");
+  PgmPrintln("K9 sound module");
+  PgmPrint("freeMemory()=");
+  Serial.println(freeMemory());
+
+byte testbyte;
+int testlength = strlen_P((PGM_P)pgm_read_word(&group_table[15]));
+Serial.println((int)testlength);
+i=0;
+while (i<testlength) {
+  memcpy_P(&testbyte, (PGM_P)pgm_read_word(&group_table[15])+i, 1);
+  Serial.print((int)testbyte);
+  Serial.print(", ");
+  i++;
+}
+
   pinMode(ledPin, OUTPUT);
   randomSeed(analogRead(randPin)); 
   if (!card.init()) {
@@ -430,82 +449,23 @@ void loop() { // main program
       Serial.println(buffer);
     } // end of button press
   } // end of "not end of line
+// grab all but the first character as a string for use in different commands
+  i=1;
+  soundindex = "";
+  while (buffer[i] != 0 && i < 12) { // make soundindex be the rest of the digits
+    soundindex = soundindex + buffer[i];
+    i++;
+  } // end of soundindex string construction
+
   if (buffer[0]=='p') { // if the first character is p, it's a play command
-    i=1;
-    soundindex = "";
-    while (buffer[i] != 0 && i < 4) { // make soundindex be the next three digits
-      soundindex = soundindex + buffer[i];
-      i++;
-    }
     speak(soundindex);
-  } else if (buffer[0]=='n') { // they asked for an affirmative
-    i=1;
-    soundindex = "";
-    while (buffer[i] != 0 && i < 12) { // make soundindex be the next three digits
-      soundindex = soundindex + buffer[i];
-      i++;
-    }
+  } else if (buffer[0]=='n') { // they asked for a number to be parsed
     parse_number((float)soundindex.toInt());
-  } else if (buffer[0]=='g') { // they asked for an affermative
-//      Serial.println(buffer[1]);
-      if (buffer[2]==0) { // if the string is just 1 character long
-        switch (buffer[1]) {
-          case '1':
-            rn=rand_array(g1array,g1size);
-            break;
-          case '2':
-            rn=rand_array(g2array,g2size);
-            break;
-          case '3':
-            rn=rand_array(g3array,g3size);
-            break;
-          case '4':
-            rn=rand_array(g4array,g4size);
-            break;
-          case '5':
-            rn=rand_array(g5array,g5size);
-            break;
-          case '6':
-            rn=rand_array(g6array,g6size);
-            break;
-          case '7':
-            rn=rand_array(g7array,g7size);
-            break;
-          case '8':
-            rn=rand_array(g8array,g8size);
-            break;
-          case '9':
-            rn=rand_array(g9array,g9size);
-            break;
-        }
-        } else { // a two digit group
-          switch (buffer[2]) {
-            case '0': // 10
-              rn=rand_array(g10array,g10size);
-              break;
-            case '1': // 11
-              rn=rand_array(g11array,g11size);
-              break;
-            case '2': // 12
-              rn=rand_array(g12array,g12size);
-              break;
-            case '3': // 13
-              rn=rand_array(g13array,g13size);
-              break;
-            case '4': // 14
-              rn=rand_array(g14array,g14size);
-              break;
-            case '5': // 15
-              rn=rand_array(g15array,g15size);
-              break;
-            case '6': // 16
-              rn=rand_array(g16array,g16size);
-              break;
-          } // end of switch
-        } // end of if
+  } else if (buffer[0]=='g') { // they asked for random sound from a group
+      Serial.println(soundindex);
+      rn=rand_array(soundindex.toInt()-1); // pick random number from the array one less than the group number
       speak_by_num(rn);
 //      Serial.println((int) rn);
-
   } else if (buffer[0]=='r') { // they asked for a random sound
     rn = random(numsounds)+1; // pick a random number from 1 - numsounds
     speak_by_num(rn);
