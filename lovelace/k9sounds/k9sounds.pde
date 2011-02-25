@@ -214,7 +214,7 @@ void speak_by_num(int numtoplay) {
 */
 void parse_number(float numtosay) {
   PgmPrint(" parsing number: ");
-  Serial.println(numtosay);
+  Serial.println(numtosay,10);
   int num;
   if (numtosay < 0) { // maybe it's a negative number.  If so, note that and then treat it as positive
     speak_num("n"); // say "negative"
@@ -241,7 +241,7 @@ void parse_number(float numtosay) {
   if (numtosay >= 1e3) { // =1,000 or one thousand in scientific notation
     num=numtosay/1e3;
     hundreds(num); // call hundreds to speak these three
-    speak_num("t"); // say "thousand"
+    speak_num("th"); // say "thousand"
     numtosay=numtosay-(num * 1e3);
   }
   hundreds(numtosay);  // say whatever is left before the zero
@@ -279,8 +279,12 @@ void tens(int numtosay) {
     if ((numtosay % 10) > 0) { // speak the remainder, if any.
       speak_num(String(numtosay % 10));
     } // end of remainder condition
-  } else { // end of bigger number condition, so speak the smaller numbers
-    speak_num(String(numtosay)); // remaining condition should be 0-19, which we have files for
+  } else if (numtosay > 15 ) { // end of bigger number condition, so speak the smaller numbers, starting with half of the teens
+    num = numtosay - 10; // convert 19 to 9, 16 to 6, etc.
+    speak_num(String(num)); // say the number and then...
+    speak_num("tn"); // ... say "teen"
+  } else { // end of special number handling, for the rest just say the number
+    speak_num(String(numtosay)); // remaining condition should be 0-15, which we have files for
   }
 }
 
@@ -310,6 +314,16 @@ Serial.print("r_size: ");Serial.println((int)r_size);
   byte r_result;
   memcpy_P(&r_result, (PGM_P)pgm_read_word(&group_table[rindex])+randNumber, 1);
   return r_result;
+}
+
+// convert a String to a float
+float floatify( String instring) {
+  char tbuff[16];
+  instring.toCharArray(tbuff,16); // copy the String to a char array
+//  tbuff[15] = 0; // terminate the string, just in case
+  Serial.print ("tbuff :");
+  Serial.println (tbuff);
+  return atof(tbuff);
 }
 
 /*
@@ -442,8 +456,6 @@ void loop() { // main program
         case 32768: // 16
           strcpy(buffer,"g16");
           break;
-
-
       } // end of button switch
       PgmPrint("buffer = '");
       Serial.println(buffer);
@@ -456,11 +468,11 @@ void loop() { // main program
     soundindex = soundindex + buffer[i];
     i++;
   } // end of soundindex string construction
-
   if (buffer[0]=='p') { // if the first character is p, it's a play command
     speak(soundindex);
   } else if (buffer[0]=='n') { // they asked for a number to be parsed
-    parse_number((float)soundindex.toInt());
+//    parse_number((float)soundindex.toInt());
+    parse_number(floatify(soundindex));
   } else if (buffer[0]=='g') { // they asked for random sound from a group
       Serial.println(soundindex);
       rn=rand_array(soundindex.toInt()-1); // pick random number from the array one less than the group number
